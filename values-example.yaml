@@ -1,0 +1,478 @@
+prometheus:
+  ingress:
+    enabled: true
+    annotations:
+      cert-manager.io/cluster-issuer: tap-ingress-selfsigned
+    hosts:
+    - "prometheus.tap-demo.vrabbi.cloud"
+    tls:
+    - secretName: grafana-cert
+      hosts:
+      - "prometheus.tap-demo.vrabbi.cloud"
+grafana:
+  adminPassword: "Ch@ngeMe123!"
+  ingress:
+    enabled: true
+    annotations:
+      cert-manager.io/cluster-issuer: tap-ingress-selfsigned
+    hosts:
+    - "grafana.tap-demo.vrabbi.cloud"
+    tls:
+    - secretName: grafana-cert
+      hosts:
+      - "grafana.tap-demo.vrabbi.cloud"
+kube-state-metrics:
+  rbac:
+    extraRules:
+    - apiGroups: ["carto.run"]
+      resources: ["deliverables","workloads"]
+      verbs: ["list", "watch"]
+    - apiGroups: ["source.toolkit.fluxcd.io"]
+      resources: ["gitrepositories"]
+      verbs: ["list", "watch"]
+    - apiGroups: ["tekton.dev"]
+      resources: ["taskruns","pipelineruns"]
+      verbs: ["list", "watch"]
+    - apiGroups: ["scanning.apps.tanzu.vmware.com"]
+      resources: ["imagescans","sourcescans"]
+      verbs: ["list", "watch"]
+    - apiGroups: ["kpack.io"]
+      resources: ["images","builds"]
+      verbs: ["list", "watch"]
+    - apiGroups: ["packaging.carvel.dev"]
+      resources: ["packagerepositories","packageinstalls"]
+      verbs: ["list", "watch"]
+    - apiGroups: ["kappctrl.k14s.io"]
+      resources: ["apps"]
+      verbs: ["list", "watch"]
+  customResourceState:
+    enabled: true
+    config:
+      spec:
+        resources:
+          - groupVersionKind:
+              group: carto.run
+              version: "v1alpha1"
+              kind: Deliverable
+            labelsFromPath:
+              name: [metadata, name]
+              namespace: [metadata, namespace]
+              type: [metadata, labels, apps.tanzu.vmware.com/workload-type]
+              has_tests: [metadata, labels, apps.tanzu.vmware.com/has-tests]
+            metricNamePrefix: cartographer
+            metrics:
+              - name: deliverable_info
+                help: Deliverable info from status and spec
+                each:
+                  type: Info
+                  info:
+                    labelsFromPath:
+                      created_at: [metadata, creationTimestamp]
+                      auto_configure_actuators: [metadata, labels, apps.tanzu.vmware.com/auto-configure-actuators]
+                      source_image: [spec, source, image]
+                      source_git_url: [spec, source, git, url]
+                      source_git_branch: [spec, source, git, ref, branch]
+                      source_git_commit: [spec, source, git, ref, commit]
+                      source_git_tag: [spec, source, git, ref, tag]
+                      source_sub_path: [spec, source, subPath]
+                      delivery: [status, deliveryRef, name]
+              - name: deliverable_status
+                help: Deliverable status from conditions
+                each:
+                  type: Gauge
+                  gauge:
+                    path: [status, conditions]
+                    labelsFromPath:
+                      type: ["type"]
+                      status: ["status"]
+                      reason: ["reason"]
+                      message: ["message"]
+                      last_transition_ime: ["lastTransitionTime"]
+                    valueFrom: ["status"]
+          - groupVersionKind:
+              group: carto.run
+              version: "v1alpha1"
+              kind: Workload
+            labelsFromPath:
+              name: [metadata, name]
+              namespace: [metadata, namespace]
+              type: [metadata, labels, apps.tanzu.vmware.com/workload-type]
+              has_tests: [metadata, labels, apps.tanzu.vmware.com/has-tests]
+            metricNamePrefix: cartographer
+            metrics:
+              - name: workload_info
+                help: Workload info from status and spec
+                each:
+                  type: Info
+                  info:
+                    labelsFromPath:
+                      created_at: [metadata, creationTimestamp]
+                      auto_configure_actuators: [metadata, labels, apps.tanzu.vmware.com/auto-configure-actuators]
+                      source_image: [spec, source, image]
+                      source_git_url: [spec, source, git, url]
+                      source_git_branch: [spec, source, git, ref, branch]
+                      source_git_commit: [spec, source, git, ref, commit]
+                      source_git_tag: [spec, source, git, ref, tag]
+                      source_sub_path: [spec, source, subPath]
+                      supply_chain: [status, supplyChainRef, name]
+                      debug_enabled: [spec, params, "[name=debug]", value]
+                      live_update_enabled: [spec, params, "[name=live-update]", value]
+              - name: workload_status
+                help: Workload status from conditions
+                each:
+                  type: Gauge
+                  gauge:
+                    path: [status, conditions]
+                    labelsFromPath:
+                      type: ["type"]
+                      status: ["status"]
+                      reason: ["reason"]
+                      message: ["message"]
+                      last_transition_ime: ["lastTransitionTime"]
+                    valueFrom: ["status"]
+          - groupVersionKind:
+              group: source.toolkit.fluxcd.io
+              version: "v1beta2"
+              kind: GitRepository
+            labelsFromPath:
+              name: [metadata, name]
+              namespace: [metadata, namespace]
+              component: [metadata, labels, app.kubernetes.io/component]
+              owner: [metadata, ownerReferences, "0", name]
+              owner_type: [metadata, ownerReferences, "0", kind]
+              workload: [metadata, labels, carto.run/workload-name]
+            metricNamePrefix: flux
+            metrics:
+              - name: git_repository_info
+                help: Flux Git Repository info from status and spec
+                each:
+                  type: Info
+                  info:
+                    labelsFromPath:
+                      sync_interval: [spec, interval]
+                      branch: [spec, ref, branch]
+                      git_secret: [spec, secretRef, name]
+                      git_url: [spec, url]
+                      internal_url: [status, artifact, url]
+                      last_updated: [status, artifact, lastUpdateTime]
+                      revision: [status, artifact, revision]
+                      status: [status, conditions, "[type=Succeeded]", reason]
+              - name: git_repository_status
+                help: Git Repository status from conditions
+                each:
+                  type: Gauge
+                  gauge:
+                    path: [status, conditions]
+                    labelsFromPath:
+                      type: ["type"]
+                      status: ["status"]
+                      reason: ["reason"]
+                      message: ["message"]
+                      last_transition_ime: ["lastTransitionTime"]
+                    valueFrom: ["status"]
+          - groupVersionKind:
+              group: tekton.dev
+              version: "v1beta1"
+              kind: TaskRun
+            labelsFromPath:
+              name: [metadata, name]
+              namespace: [metadata, namespace]
+              component: [metadata, labels, app.kubernetes.io/component]
+              owner: [metadata, ownerReferences, "0", name]
+              owner_type: [metadata, ownerReferences, "0", kind]
+              workload: [metadata, labels, carto.run/workload-name]
+              task: [spec, taskRef, name]
+            metricNamePrefix: tekton
+            metrics:
+              - name: task_run_info
+                help: Tekton Task Run info from status and spec
+                each:
+                  type: Info
+                  info:
+                    labelsFromPath:
+                      task_type: [spec, taskRef, kind]
+                      completion_time: [status, completionTime]
+                      start_time: [status, startTime]
+                      carto_resource: [metadata, labels, carto.run/resource-name]
+                      supply_chain: [metadata, labels, carto.run/supply-chain-name]
+                      pod_name: [status, podName]
+              - name: task_run_status
+                help: Task Run status from conditions
+                each:
+                  type: Gauge
+                  gauge:
+                    path: [status, conditions]
+                    labelsFromPath:
+                      type: ["type"]
+                      status: ["status"]
+                      reason: ["reason"]
+                      message: ["message"]
+                    valueFrom: ["status"]
+          - groupVersionKind:
+              group: scanning.apps.tanzu.vmware.com
+              version: "v1beta1"
+              kind: SourceScan
+            labelsFromPath:
+              name: [metadata, name]
+              namespace: [metadata, namespace]
+              scan_template: [spec, scanTemplate]
+              scan_policy: [spec, scanPolicy]
+              source_url: [spec, blob, url]
+              source_revision: [spec, blob, revision]
+              component: [metadata, labels, app.kubernetes.io/component]
+              owner: [metadata, ownerReferences, "0", name]
+              owner_type: [metadata, ownerReferences, "0", kind]
+              workload: [metadata, labels, carto.run/workload-name]
+              carto_resource: [metadata, labels, carto.run/resource-name]
+              supply_chain: [metadata, labels, carto.run/supply-chain-name]
+              scanner_name: [status, scannedBy, scanner, name]
+              scanner_version: [status, scannedBy, scanner, version]
+            metricNamePrefix: scst
+            metrics:
+              - name: source_scan_info
+                help: Source scan information
+                each:
+                  type: Info
+                  info:
+                    labelsFromPath:
+                      store_url: [status, metadataUrl]
+                      phase: [status, phase]
+                      critical_cve_count: [status, cveCount, critical]
+                      high_cve_count: [status, cveCount, high]
+                      low_cve_count: [status, cveCount, low]
+                      medium_cve_count: [status, cveCount, medium]
+                      total_cve_count: [status, cveCount, total]
+                      unkown_cve_count: [status, cveCount, unknown]
+              - name: source_scan_status
+                help: Source Scan status from conditions
+                each:
+                  type: Gauge
+                  gauge:
+                    path: [status, conditions]
+                    labelsFromPath:
+                      type: ["type"]
+                      status: ["status"]
+                      reason: ["reason"]
+                      message: ["message"]
+                    valueFrom: ["status"]
+          - groupVersionKind:
+              group: scanning.apps.tanzu.vmware.com
+              version: "v1beta1"
+              kind: ImageScan
+            labelsFromPath:
+              name: [metadata, name]
+              namespace: [metadata, namespace]
+              scan_template: [spec, scanTemplate]
+              scan_policy: [spec, scanPolicy]
+              image: [spec, registry, image]
+              component: [metadata, labels, app.kubernetes.io/component]
+              owner: [metadata, ownerReferences, "0", name]
+              owner_type: [metadata, ownerReferences, "0", kind]
+              workload: [metadata, labels, carto.run/workload-name]
+              carto_resource: [metadata, labels, carto.run/resource-name]
+              supply_chain: [metadata, labels, carto.run/supply-chain-name]
+              scanner_name: [status, scannedBy, scanner, name]
+              scanner_version: [status, scannedBy, scanner, version]
+            metricNamePrefix: scst
+            metrics:
+              - name: image_scan_info
+                help: Image scan information
+                each:
+                  type: Info
+                  info:
+                    labelsFromPath:
+                      store_url: [status, metadataUrl]
+                      phase: [status, phase]
+                      critical_cve_count: [status, cveCount, critical]
+                      high_cve_count: [status, cveCount, high]
+                      low_cve_count: [status, cveCount, low]
+                      medium_cve_count: [status, cveCount, medium]
+                      total_cve_count: [status, cveCount, total]
+                      unkown_cve_count: [status, cveCount, unknown]
+              - name: image_scan_status
+                help: Image Scan status from conditions
+                each:
+                  type: Gauge
+                  gauge:
+                    path: [status, conditions]
+                    labelsFromPath:
+                      type: ["type"]
+                      status: ["status"]
+                      reason: ["reason"]
+                      message: ["message"]
+                    valueFrom: ["status"]
+          - groupVersionKind:
+              group: tekton.dev
+              version: "v1beta1"
+              kind: PipelineRun
+            labelsFromPath:
+              name: [metadata, name]
+              namespace: [metadata, namespace]
+              component: [metadata, labels, app.kubernetes.io/component]
+              owner: [metadata, ownerReferences, "0", name]
+              owner_type: [metadata, ownerReferences, "0", kind]
+              workload: [metadata, labels, carto.run/workload-name]
+            metricNamePrefix: tekton
+            metrics:
+              - name: pipeline_run_info
+                help: Tekton Pipeline Run info from status and spec
+                each:
+                  type: Info
+                  info:
+                    labelsFromPath:
+                      pipeline: [spec, pipelineRef, name]
+                      carto_resource: [metadata, labels, carto.run/resource-name]
+                      supply_chain: [metadata, labels, carto.run/supply-chain-name]
+                      completion_time: [status, completionTime]
+                      start_time: [status, startTime]
+              - name: pipeline_run_status
+                help: Pipeline Run status from conditions
+                each:
+                  type: Gauge
+                  gauge:
+                    path: [status, conditions]
+                    labelsFromPath:
+                      type: ["type"]
+                      status: ["status"]
+                      reason: ["reason"]
+                      message: ["message"]
+                    valueFrom: ["status"]
+          - groupVersionKind:
+              group: kpack.io
+              version: "v1alpha2"
+              kind: Build
+            labelsFromPath:
+              name: [metadata, name]
+              namespace: [metadata, namespace]
+              component: [metadata, labels, app.kubernetes.io/component]
+              owner: [metadata, ownerReferences, "0", name]
+              owner_type: [metadata, ownerReferences, "0", kind]
+              workload: [metadata, labels, carto.run/workload-name]
+            metricNamePrefix: kpack
+            metrics:
+              - name: build_info
+                help: Build info from status and spec
+                each:
+                  type: Info
+                  info:
+                    labelsFromPath:
+                      owner_image: [metadata, labels, image.kpack.io/image]
+                      build_number: [metadata, labels, image.kpack.io/buildNumber]
+                      builder: [spec, builder, image]
+              - name: build_involved_buildpacks
+                help: Buildpacks involved in a build
+                each:
+                  type: Info
+                  info:
+                    path: [status, buildMetadata]
+                    labelsFromPath:
+                      version: ["version"]
+                      id: ["id"]
+              - name: build_status
+                help: Image status from conditions
+                each:
+                  type: Gauge
+                  gauge:
+                    path: [status, conditions]
+                    labelsFromPath:
+                      type: ["type"]
+                      status: ["status"]
+                      reason: ["reason"]
+                      last_transition_ime: ["lastTransitionTime"]
+                    valueFrom: ["status"]
+          - groupVersionKind:
+              group: kpack.io
+              version: "v1alpha2"
+              kind: Image
+            labelsFromPath:
+              name: [metadata, name]
+              namespace: [metadata, namespace]
+              component: [metadata, labels, app.kubernetes.io/component]
+              owner: [metadata, ownerReferences, "0", name]
+              owner_type: [metadata, ownerReferences, "0", kind]
+              workload: [metadata, labels, carto.run/workload-name]
+            metricNamePrefix: kpack
+            metrics:
+              - name: image_info
+                help: Image info from status and spec
+                each:
+                  type: Info
+                  info:
+                    labelsFromPath:
+                      builder: [spec, builder, name]
+                      builder_type: [spec, builder, kind]
+                      build_count: [status, buildCounter]
+                      stack: [status, latestStack]
+                      latest_image: [status, latestImage]
+              - name: image_status
+                help: Image status from conditions
+                each:
+                  type: Gauge
+                  gauge:
+                    path: [status, conditions]
+                    labelsFromPath:
+                      type: ["type"]
+                      status: ["status"]
+                      reason: ["reason"]
+                      last_transition_ime: ["lastTransitionTime"]
+                    valueFrom: ["status"]
+          - groupVersionKind:
+              group: packaging.carvel.dev
+              version: "*"
+              kind: PackageRepository
+            labelsFromPath:
+              name: [metadata, name]
+              namespace: [metadata, namespace]
+            metricNamePrefix: carvel
+            metrics:
+              - name: packagerepository_info
+                help: PackageRepository info on status and fetch target
+                each:
+                  type: Info
+                  info:
+                    labelsFromPath:
+                      type: [status, conditions, "0", type]
+                      status: [status, conditions, "0", status]
+                      oci_image: [spec, fetch, imgpkgBundle, image]
+                      git_url: [spec, fetch, git, url]
+                      git_ref: [spec, fetch, git, ref]
+          - groupVersionKind:
+              group: packaging.carvel.dev
+              version: "*"
+              kind: PackageInstall
+            labelsFromPath:
+              name: [metadata, name]
+              namespace: [metadata, namespace]
+            metricNamePrefix: carvel
+            metrics:
+              - name: packageinstall_info
+                help: PackageInstall info on status and fetch target
+                each:
+                  type: Info
+                  info:
+                    labelsFromPath:
+                      type: [status, conditions, "0", type]
+                      status: [status, conditions, "0", status]
+                      package_name: [spec, packageRef, refName]
+                      package_version: [status, version]
+                      ytt_overlay_secret: [metadata, annotations, ext.packaging.carvel.dev/ytt-paths-from-secret-name.0]
+          - groupVersionKind:
+              group: kappctrl.k14s.io
+              version: "*"
+              kind: App
+            labelsFromPath:
+              name: [metadata, name]
+              namespace: [metadata, namespace]
+            metricNamePrefix: carvel
+            metrics:
+              - name: app_info
+                help: App info on status and fetch target
+                each:
+                  type: Info
+                  info:
+                    labelsFromPath:
+                      type: [status, conditions, "0", type]
+                      status: [status, conditions, "0", status]
+                      oci_image: [spec, fetch, "0", imgpkgBundle, image]
+                      git_url: [spec, fetch, "0", git, url]
+                      git_ref: [spec, fetch, "0", git, ref]
